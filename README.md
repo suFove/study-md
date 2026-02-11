@@ -1,181 +1,278 @@
+# macOS 从零配置 OpenClaw 完整指南  
+（网络修复 / Node / npm / Git SSH / Homebrew / 飞书插件 / 常用运维）
 
-macOS 上从零配置 OpenClaw：网络修复、Node/npm、Git、Homebrew、飞书插件与常用运维命令（含踩坑记录）
+> 适用对象：在 macOS 上安装并运行 OpenClaw（含 gateway / 插件），并需要完整开发环境的人。  
+> ⚠️ 注意：涉及密钥（appSecret / SSH key）的地方请使用占位符，不要泄露真实信息。
 
-适用对象：在 macOS 上安装并运行 OpenClaw（含网关/插件），并需要配置 Node/npm、Git SSH、Homebrew、飞书插件等配套环境的人。
-说明：本文包含一些“踩坑修复命令”，请按需执行；涉及账号密钥的内容务必使用占位符，不要把真实密钥写进博客或提交到仓库。
+---
 
+# 目录
 
-0. 准备工作与依赖概览
+1. 网络异常修复（macOS）
+2. Apple 更新服务异常修复（可选）
+3. 双系统恢复 macOS（Boot Camp 清理）
+4. 安装 Node.js + npm 镜像
+5. 解决 npm 全局权限问题（推荐）
+6. Git / Xcode CLI 安装
+7. GitHub SSH 配置（解决 publickey 报错）
+8. 安装 Homebrew
+9. 安装 OpenClaw
+10. 飞书插件完整配置
+11. 常用网站清单
+12. OpenClaw 常用命令
+13. 重启前后操作清单
+14. 最小自检清单
 
-你最终会完成这些事：
-- 修复 macOS 可能出现的网络异常/系统服务不可用问题
-- 安装 Node.js（示例：Node 22.x）与 npm 国内镜像（含 nrm）
-- 配置 Git + GitHub SSH，避免 Permission denied (publickey)
-- 安装 Homebrew
-- 安装并配置 OpenClaw（含网关 daemon）
-- 安装并配置飞书插件（WebSocket 模式）
-- 汇总“重启前/后”的操作清单，降低故障概率
+---
 
+# 1️⃣ macOS 网络异常修复
 
-1. macOS 连不上网：清理网络相关 plist（常见有效）
+当出现：
 
-当出现 Wi‑Fi/网络异常、莫名其妙连不上 等情况，可尝试清理系统网络配置缓存（会丢失部分网络记录，需要重新连 Wi‑Fi）：
+- Wi-Fi 连不上
+- 网络异常
+- 系统代理错乱
+- 虚拟网卡冲突
 
-1）打开 Finder，前往目录（菜单：前往 -> 前往文件夹）：
+可尝试清理网络缓存。
+
+## 步骤
+
+进入目录：
+
+```
 /Library/Preferences/SystemConfiguration/
+```
 
-2）将下列文件拖进废纸篓（或先备份到别处）：
-- com.apple.airport.preferences.plist
-- com.apple.network.identification.plist
-- com.apple.wifi.message-tracer.plist
-- NetworkInterfaces.plist
-- preferences.plist
+删除以下文件：
 
-3）关机并重新启动（按你的笔记：关机重启，而不是仅重启）。
+```
+com.apple.airport.preferences.plist
+com.apple.network.identification.plist
+com.apple.wifi.message-tracer.plist
+NetworkInterfaces.plist
+preferences.plist
+```
 
-提示：如果你在使用 VPN 的系统代理或虚拟网卡，先关闭它们再重启，避免网络状态被劫持。
+然后：
 
+```
+关机 → 再开机
+```
 
-2. 旧系统连不上 Apple 服务：设置软件更新目录（可选）
+⚠️ 注意：
+- 会丢失 Wi-Fi 记录
+- 若开启 VPN，先关闭系统代理
 
-某些旧版 macOS 可能出现 Apple 服务/更新源不可用 的情况，可以通过设置 nvram 的 Software Update Catalog URL 尝试解决。
+---
 
-2.1 情况 A：使用 lASUCatalogURL
+# 2️⃣ Apple 服务无法连接（旧系统可选）
 
+若恢复或更新时报：
+
+```
+无法与服务器取得联系
+```
+
+可尝试设置 Software Update Catalog。
+
+## 情况 A
+
+```bash
 sudo nvram lASUCatalogURL=https://swscan.apple.com/content/catalogs/others/index-10.16seed10.16-10.15-10.14-10.13-10.12-10.11-10.10-10.9-mountainlion-lion-snowleopard.leopard.merged-1.sucatalog
+```
 
-2.2 情况 B：安装/恢复时报 “无法与服务器取得联系”（IASUCatalogURL）
+## 情况 B
 
+```bash
 sudo nvram IASUCatalogURL=https://swscan.apple.com/content/catalogs/others/index-10.16seed-10.16-10.15-10.14-10.13-10.12-10.11-10.10-10.9-mountainlion-lion-snowleopard-leopard.merged-1.sucatalog
+```
 
-说明：nvram 会修改机器的启动参数存储。仅在明确遇到该问题时使用；如后续需要恢复默认，可再查 Apple 官方/社区的恢复方式（不同系统版本略有差异）。
+⚠️ 修改的是 NVRAM，谨慎使用。
 
+---
 
-3. 双系统恢复 macOS（Boot Camp/Windows 清理思路）
+# 3️⃣ 双系统清理（Boot Camp）
 
-操作顺序（偏经验流）：
-1）先利用 Boot Camp 删除虚拟机/Windows 项（如有）
-2）使用 磁盘工具 抹除 Windows 磁盘/分区
-3）若恢复/安装过程报 无法与服务器取得联系，可参考上节 IASUCatalogURL 的处理
+操作顺序：
 
-注意：抹除磁盘会导致数据不可恢复，务必提前备份。
+1. Boot Camp 删除 Windows
+2. 磁盘工具抹除 Windows 分区
+3. 若恢复报错 → 参考第 2 节
 
+⚠️ 抹除磁盘前务必备份
 
-4. 安装 Node.js（示例：Node 22.x）与 npm 国内镜像
+---
 
-4.1 安装 Node.js
-- 双击 nodejs22.22.dmg 文件安装 Node.js
+# 4️⃣ 安装 Node.js（示例 Node 22）
 
-验证：
+## 安装
+
+下载 dmg 安装包后双击安装。
+
+## 验证
+
+```bash
 node -v
 npm -v
+```
 
-4.2 配置 npm 国内镜像（两种方式）
+---
 
-方式 1：直接使用淘宝镜像（npmmirror）
+# 5️⃣ 配置 npm 国内镜像
+
+## 方式 1（直接设置）
+
+```bash
 npm config set registry https://registry.npmmirror.com/
+```
 
-方式 2：使用 nrm 管理镜像源
+## 方式 2（使用 nrm）
+
+```bash
 npm install -g nrm
 nrm ls
 nrm use taobao
 nrm test
+```
 
-参考链接：https://cloud.tencent.com/developer/article/2483466
+---
 
+# 6️⃣ 解决 npm 全局权限问题（强烈推荐）
 
-5. （推荐）解决 macOS 上全局 npm 权限/路径：使用 ~/.npm-global
+避免频繁 sudo。
 
-为了避免全局安装时频繁 sudo 或权限问题，可以把全局安装目录迁到用户目录：
+## 1 创建目录
 
-# 1 创建一个全局目录
+```bash
 mkdir -p ~/.npm-global
+```
 
-# 2 告诉 npm 用这个目录
+## 2 设置 npm prefix
+
+```bash
 npm config set prefix '~/.npm-global'
+```
 
-# 3 把它加进 PATH（zsh）
+## 3 加入 PATH（zsh）
+
+```bash
 echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.zshrc
-
-# 如果你用 bash：
-echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.bashrc
-
-# 4 重新加载（zsh）
 source ~/.zshrc
+```
 
-验证：
-which openclaw
+## 验证
+
+```bash
 echo $PATH
+which npm
+```
 
+---
 
-6. 使用 Git：需要更新 Xcode（命令行工具）
+# 7️⃣ 安装 Xcode Command Line Tools
 
-如果你在 macOS 上执行 git、编译依赖等遇到报错，通常需要安装/更新 Xcode Command Line Tools。
-
+```bash
 xcode-select --install
+```
 
+---
 
-7. GitHub SSH 报错：Permission denied (publickey) 的修复流程
+# 8️⃣ GitHub SSH 修复（Permission denied publickey）
 
-典型错误：
-git@github.com: Permission denied (publickey).
-fatal: Could not read from remote repository.
+## 1 生成 SSH key
 
-7.1 生成 SSH 密钥
+```bash
 ssh-keygen -t rsa -b 4096 -C "your_email@example.com"
+```
 
-默认会生成：
-- 私钥：~/.ssh/id_rsa
-- 公钥：~/.ssh/id_rsa.pub
+生成：
 
-7.2 将公钥添加到 GitHub
+```
+~/.ssh/id_rsa
+~/.ssh/id_rsa.pub
+```
+
+## 2 添加到 GitHub
+
+```bash
 cat ~/.ssh/id_rsa.pub
-GitHub：Settings -> SSH and GPG keys -> New SSH key
+```
 
-7.3 测试 SSH 连接
+GitHub → Settings → SSH and GPG keys → New SSH key
+
+## 3 测试连接
+
+```bash
 ssh -T git@github.com
-正常输出示例：
-Hi username! You've successfully authenticated, but GitHub does not provide shell access.
+```
 
-7.4 确认仓库 remote 使用 SSH（非 HTTPS）
+成功示例：
+
+```
+Hi username! You've successfully authenticated.
+```
+
+## 4 确认远程地址使用 SSH
+
+```bash
 git remote -v
 git remote set-url origin git@github.com:username/repository.git
+```
 
-完成后再执行你需要的安装/拉取操作（例如继续 npm install 等）。
+---
 
+# 9️⃣ 安装 Homebrew
 
-8. 安装 Homebrew（可选但很常用）
-
+```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 echo 'eval "$(/usr/local/bin/brew shellenv)"' >> ~/.zprofile
 eval "$(/usr/local/bin/brew shellenv)"
+```
 
 验证：
+
+```bash
 brew -v
+```
 
+---
 
-9. 安装 OpenClaw 与基础配置
+# 🔟 安装 OpenClaw
 
-9.1 安装 OpenClaw
+## 安装
+
+```bash
 npm install -g openclaw@latest
+```
 
-9.2 进入新手引导（含 daemon）
+## 初始化
+
+```bash
 openclaw onboard --install-daemon
+```
 
-9.3 配置（交互式）
+## 配置
+
+```bash
 openclaw configure
+```
 
+---
 
-10. 飞书插件：安装、权限 scopes、配置 appId/appSecret
+# 1️⃣1️⃣ 飞书插件完整配置
 
-10.1 插件仓库参考
-https://github.com/m1heng/clawdbot-feishu?tab=readme-ov-file#%E4%B8%AD%E6%96%87
+## 安装插件
 
-10.2 安装飞书插件
+```bash
 openclaw plugins install @m1heng-clawd/feishu
+```
 
-10.3 权限 scopes 配置示例
+---
 
+## 配置 Scopes 示例
+
+```json
 {
   "scopes": {
     "tenant": [
@@ -205,62 +302,100 @@ openclaw plugins install @m1heng-clawd/feishu
     "user": []
   }
 }
+```
 
-10.4 配置飞书 appId / appSecret / 启用 / 连接模式
+---
 
-注意：请不要在博客/仓库里写真实的 appSecret。下面是占位符示例：
+## 设置 appId / appSecret
 
+⚠️ 使用占位符
+
+```bash
 openclaw config set channels.feishu.appId "cli_xxxxxxxxxxxxxxxxx"
 openclaw config set channels.feishu.appSecret "xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 openclaw config set channels.feishu.enabled true
 openclaw config set channels.feishu.connectionMode "websocket"
+```
 
+---
 
-11. 需要注册/准备的网站清单
+# 1️⃣2️⃣ 常用网站清单
 
-1. 邮箱：https://mail.163.com/
-2. VPN：https://2024.vp1.link/
-3. 飞书开发平台：https://open.feishu.cn/app
-4. 模型 MiniMax：https://www.minimax.io/
-5. 联网搜索 skills-api（Brave Search API）：https://brave.com/search/api/
+- 邮箱：https://mail.163.com/
+- 飞书开发平台：https://open.feishu.cn/app
+- MiniMax：https://www.minimax.io/
+- Brave Search API：https://brave.com/search/api/
 
+---
 
-12. OpenClaw 常用命令速查
+# 1️⃣3️⃣ OpenClaw 常用命令
 
-安装与引导：
+## 安装 / 初始化
+
+```bash
 npm install -g openclaw@latest
 openclaw onboard --install-daemon
 openclaw configure
+```
 
-终端启动时（环境变量）：
-source ~/.zshrc
+## 网关管理
 
-网关管理：
+```bash
 openclaw gateway start
 openclaw gateway restart
 openclaw gateway stop
+```
 
+---
 
-13. 重启/关机前后的操作清单（强烈建议照做）
+# 1️⃣4️⃣ 重启操作清单
 
-13.1 电脑关机/重启前
-1）先关闭 vpn 的系统代理和虚拟网卡
-2）使用命令关闭网关：
+## 关机前
+
+```bash
 openclaw gateway stop
+```
 
-13.2 电脑重启后，若要重启 openclaw
-1）启动终端先运行：
+- 关闭 VPN 系统代理
+- 关闭虚拟网卡
+
+## 重启后
+
+```bash
 source ~/.zshrc
-2）然后启动网关：
 openclaw gateway start
-或：
-openclaw gateway restart
+```
 
+---
 
-14. 最小自检清单（建议收藏）
+# ✅ 最小自检清单
 
-- node -v / npm -v 正常
-- npm config get registry 指向你期望的镜像
-- openclaw -v 可执行，且 which openclaw 指向 ~/.npm-global/bin/openclaw（若你采用该方案）
-- ssh -T git@github.com 通过（如需 GitHub）
-- 飞书：appId/appSecret 已配置、scopes 正确、连接模式 websocket
+```bash
+node -v
+npm -v
+npm config get registry
+which openclaw
+ssh -T git@github.com
+```
+
+确认：
+
+- openclaw 可执行
+- npm 镜像正确
+- SSH 正常
+- 飞书 appId/appSecret 已配置
+- connectionMode = websocket
+
+---
+
+# 🎯 至此完成
+
+你已经拥有：
+
+- 干净网络环境
+- Node + npm 优化
+- Git SSH 正常
+- Homebrew
+- OpenClaw daemon
+- 飞书 WebSocket 机器人
+
