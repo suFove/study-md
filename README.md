@@ -222,7 +222,7 @@ git remote set-url origin git@github.com:username/repository.git
 
 ---
 
-# 9️⃣ 安装 Homebrew
+# 9️⃣ 安装 Homebrew openclaw安装skills需要
 
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
